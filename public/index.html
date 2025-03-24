@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloud File Manager</title>
+  <link rel="shortcut icon" href="https://foxyx.online/assets/images/foxy.png" type="image/png">
+  <style>
+    /* === Global & Layout === */
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+      background-color: #121212;
+      color: #e0e0e0;
+    }
+    #container {
+      display: flex;
+      height: calc(100vh - 20px);
+      gap: 10px;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    /* === Sidebar File Explorer === */
+    #file-list-container {
+      width: 300px;
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 10px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px;
+      position: relative;
+      transition: border 0.3s;
+    }
+    /* Animasi ketika file eksternal didrag ke area explorer */
+    #file-list-container.drag-over {
+      border: 2px dashed #0d6efd;
+    }
+    #file-list-container h3 {
+      margin-top: 0;
+      font-size: 1.2em;
+      border-bottom: 1px solid #444;
+      padding-bottom: 5px;
+    }
+    /* --- Search --- */
+    #search-container {
+      display: flex;
+      align-items: center;
+      margin: 10px 0;
+      background-color: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 5px;
+      padding: 5px;
+    }
+    #search-container .icon {
+      width: 16px;
+      height: 16px;
+      margin-right: 5px;
+      filter: brightness(0) invert(1);
+    }
+    #file-search {
+      flex: 1;
+      border: none;
+      background: transparent;
+      outline: none;
+      color: #e0e0e0;
+      font-size: 14px;
+    }
+    /* --- Scrollbar --- */
+    #file-list-container::-webkit-scrollbar {
+      width: 8px;
+    }
+    #file-list-container::-webkit-scrollbar-track {
+      background: #1e1e1e;
+      border-radius: 10px;
+    }
+    #file-list-container::-webkit-scrollbar-thumb {
+      background-color: #444;
+      border-radius: 10px;
+    }
+    /* --- File List --- */
+    #file-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    #file-list-container li {
+      margin: 8px 0;
+      cursor: grab;
+    }
+    /* Saat item sedang didrag */
+    #file-list-container li.dragging {
+      cursor: grabbing;
+    }
+    #file-list-container li a {
+      display: block;
+      width: 100%;
+      text-decoration: none;
+      padding: 8px 10px;
+      border-radius: 5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      background-color: #2b2b2b;
+      color: #64b5f6;
+      transition: background-color 0.2s, color 0.2s;
+    }
+    /* --- Icon --- */
+    .icon {
+      width: 16px;
+      height: 16px;
+      vertical-align: middle;
+      margin-right: 8px;
+      filter: brightness(0) invert(1);
+    }
+    /* --- Hover Effects --- */
+    #file-list-container li:not(.active) a:hover {
+      background-color: #007bff;
+      color: #ffffff;
+    }
+    #file-list-container li.active a {
+      background-color: #0d6efd;
+      color: #ffffff;
+    }
+    #file-list-container li.active a:hover {
+      background-color: #0056b3;
+      color: #ffffff;
+    }
+    /* === Panel Editor === */
+    #editor-container {
+      flex: 1;
+      position: relative;
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    #editor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 15px;
+      background-color: #2a2a2a;
+      border-bottom: 1px solid #444;
+    }
+    #editor-header #file-name {
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+    #editor-header #autosave-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #editor { flex: 1; }
+    /* --- Context Menu --- */
+    #context-menu {
+      position: absolute;
+      display: none;
+      background-color: #2c2c2c;
+      border: 1px solid #444;
+      box-shadow: 2px 2px 6px rgba(0,0,0,0.5);
+      z-index: 1000;
+      width: 200px;
+      border-radius: 8px;
+    }
+    #context-menu ul {
+      list-style: none;
+      margin: 0;
+      padding: 5px 0;
+    }
+    #context-menu ul li {
+      padding: 8px 20px;
+      cursor: pointer;
+      color: #e0e0e0;
+      white-space: nowrap;
+      transition: background-color 0.2s;
+    }
+    #context-menu ul li:hover {
+      background-color: #3a3a3a;
+    }
+    /* --- Status --- */
+    #save-status { font-size: 20px; }
+    .spinner {
+      border: 3px solid #444;
+      border-top: 3px solid #64b5f6;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    /* --- Modal Styles --- */
+    #modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+    }
+    #modal {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 400px;
+      width: 90%;
+      color: #e0e0e0;
+    }
+    #modal h2 { margin-top: 0; }
+    #modal-content { margin-top: 10px; }
+    #modal-buttons { margin-top: 20px; text-align: right; }
+    #modal-buttons button {
+      margin-left: 10px;
+      padding: 5px 10px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .modal-confirm { background-color: #0d6efd; color: #ffffff; }
+    .modal-cancel { background-color: #6c757d; color: #ffffff; }
+    /* --- Upload Progress Modal --- */
+    #upload-progress-container {
+      display: none;
+      text-align: center;
+      margin-top: 15px;
+    }
+    #upload-progress-bar {
+      width: 0%;
+      height: 20px;
+      background-color: #0d6efd;
+      border-radius: 5px;
+      transition: width 0.2s;
+    }
+    #upload-progress-text {
+      margin-top: 5px;
+      font-size: 14px;
+      text-align: center;
+    }
+    /* --- Checkmark Animation --- */
+    .checkmark {
+      font-size: 48px;
+      color: #0d6efd;
+      text-align: center;
+      animation: bounce 0.5s ease-in-out;
+    }
+    @keyframes bounce {
+      0% { transform: scale(0); }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Main Container -->
+  <div id="container">
+    <!-- Sidebar File Explorer -->
+    <div id="file-list-container">
+      <h3>Foxhub: <small>Github with a Little Twist</small></h3>
+      <!-- Search -->
+      <div id="search-container">
+        <img src="https://cdn-icons-png.flaticon.com/512/18380/18380310.png" class="icon" alt="Search">
+        <input type="text" id="file-search" placeholder="Search files..." />
+      </div>
+      <ul id="file-list"></ul>
+    </div>
+    <!-- Panel Editor -->
+    <div id="editor-container">
+      <div id="editor-header">
+        <div id="file-name">No file selected</div>
+        <div id="autosave-info">
+          <span id="last-save">Last save: -</span>
+          <span id="save-status"></span>
+        </div>
+      </div>
+      <div id="editor"></div>
+    </div>
+  </div>
+
+  <!-- Context Menu (dihasilkan secara dinamis) -->
+  <div id="context-menu"></div>
+
+  <!-- Modal Container -->
+  <div id="modal-overlay">
+    <div id="modal">
+      <h2 id="modal-title"></h2>
+      <div id="modal-content"></div>
+      <div id="modal-buttons"></div>
+    </div>
+  </div>
+
+  <!-- Load Monaco Editor -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs/loader.js"></script>
+  <script>
+    // Global Variables
+    let editor = null;
+    let contextMenuTarget = null;
+    let contextMenuTargetName = "";
+    let contextMenuTargetIsDirectory = false;
+    let currentDir = "";
+    let currentFilePath = "";
+    let lastSavedWordCount = 0;
+    let fetchedFiles = [];
+    let copiedItem = null;  // Untuk copy paste
+    let draggedItem = null; // Untuk drag & drop
+    // Global variable untuk modal callback
+    let modalConfirmCallback = null;
+
+    /* ------------- Modal Helper Functions ------------- */
+    function showModal(title, contentHTML, buttonsHTML) {
+      document.getElementById("modal-title").innerHTML = title;
+      document.getElementById("modal-content").innerHTML = contentHTML;
+      document.getElementById("modal-buttons").innerHTML = buttonsHTML;
+      document.getElementById("modal-overlay").style.display = "flex";
+    }
+    function hideModal() {
+      document.getElementById("modal-overlay").style.display = "none";
+      modalConfirmCallback = null;
+    }
+    function modalConfirm() {
+      const inputVal = document.getElementById("modal-input") ? document.getElementById("modal-input").value.trim() : "";
+      if (modalConfirmCallback) { modalConfirmCallback(inputVal); }
+      hideModal();
+    }
+    function showRenameModal(currentName, confirmCallback) {
+      modalConfirmCallback = confirmCallback;
+      const contentHTML = `<input type="text" id="modal-input" value="${currentName}" style="width:100%;padding:5px;font-size:14px;border-radius:5px;border:1px solid #444;">`;
+      const buttonsHTML = `<button class="modal-cancel" onclick="hideModal()">Cancel</button>
+                           <button class="modal-confirm" onclick="modalConfirm()">Rename</button>`;
+      showModal("Rename", contentHTML, buttonsHTML);
+    }
+    function showDeleteModal(itemName, confirmCallback) {
+      modalConfirmCallback = confirmCallback;
+      const contentHTML = `<p>Are you sure you want to delete "<strong>${itemName}</strong>"?</p>`;
+      const buttonsHTML = `<button class="modal-cancel" onclick="hideModal()">Cancel</button>
+                           <button class="modal-confirm" onclick="modalConfirm()">Delete</button>`;
+      showModal("Delete", contentHTML, buttonsHTML);
+    }
+    function showNewFolderModal(confirmCallback) {
+      modalConfirmCallback = confirmCallback;
+      const contentHTML = `<input type="text" id="modal-input" placeholder="Folder name" style="width:100%;padding:5px;font-size:14px;border-radius:5px;border:1px solid #444;">`;
+      const buttonsHTML = `<button class="modal-cancel" onclick="hideModal()">Cancel</button>
+                           <button class="modal-confirm" onclick="modalConfirm()">Create Folder</button>`;
+      showModal("New Folder", contentHTML, buttonsHTML);
+    }
+    function showNewFileModal(confirmCallback) {
+      modalConfirmCallback = confirmCallback;
+      const contentHTML = `<input type="text" id="modal-input" placeholder="File name" style="width:100%;padding:5px;font-size:14px;border-radius:5px;border:1px solid #444;">`;
+      const buttonsHTML = `<button class="modal-cancel" onclick="hideModal()">Cancel</button>
+                           <button class="modal-confirm" onclick="modalConfirm()">Create File</button>`;
+      showModal("New File", contentHTML, buttonsHTML);
+    }
+    // Modal Upload: tampilkan progress bar upload (modal akan muncul terlebih dahulu)
+    function showUploadModal(confirmCallback) {
+      modalConfirmCallback = confirmCallback;
+      const progressHTML = `<form id="upload-form">
+                             <input type="file" id="upload-input" name="files" multiple style="width:100%;padding:5px;font-size:14px;border-radius:5px;border:1px solid #444;">
+                           </form>
+                           <div id="upload-progress-container" style="display:none; margin-top:15px;">
+                             <div id="upload-progress-bar" style="width:0%; height:20px; background-color:#0d6efd; border-radius:5px;"></div>
+                             <div id="upload-progress-text" style="margin-top:5px; font-size:14px; text-align:center;">0%</div>
+                           </div>`;
+      const buttonsHTML = `<button class="modal-cancel" onclick="hideModal()">Cancel</button>
+                           <button class="modal-confirm" onclick="uploadFilesHandler()">Upload</button>`;
+      // Tampilkan modal upload dengan progress bar
+      showModal("Upload Files", progressHTML, buttonsHTML);
+    }
+    function showCurlModal(confirmCallback) {
+      modalConfirmCallback = confirmCallback;
+      const contentHTML = `<input type="text" id="modal-input" placeholder="Enter URL" style="width:100%;padding:5px;font-size:14px;border-radius:5px;border:1px solid #444;">`;
+      const buttonsHTML = `<button class="modal-cancel" onclick="hideModal()">Cancel</button>
+                           <button class="modal-confirm" onclick="modalConfirm()">Curl</button>`;
+      showModal("Curl Download", contentHTML, buttonsHTML);
+    }
+    function showGetLinkModal(link) {
+      const contentHTML = `<p>Here is your link:</p>
+                           <input type="text" value="${link}" readonly style="width:100%;padding:5px;font-size:14px;border-radius:5px;border:1px solid #444;">`;
+      const buttonsHTML = `<button class="modal-confirm" onclick="hideModal()">Close</button>`;
+      showModal("Get Link", contentHTML, buttonsHTML);
+    }
+    // Modal Sukses Upload: tampilkan animasi check mark dan pesan sukses
+    function showUploadSuccessModal() {
+      const contentHTML = `<div class="checkmark">&#10003;</div>
+                           <p style="font-size:18px; text-align:center; margin:0;">Upload Berhasil</p>`;
+      const buttonsHTML = `<button class="modal-confirm" onclick="hideModal()">OK</button>`;
+      showModal("Upload Selesai", contentHTML, buttonsHTML);
+      setTimeout(hideModal, 2000);
+    }
+
+    /* ------------- Fungsi untuk membuka file media ------------- */
+    // Jika file termasuk media (gambar, audio, video, PDF, SVG, dll), tampilkan menggunakan elemen HTML
+    function openMediaFile(filePath, filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      const fileUrl = window.location.origin + "/get-file?path=" + encodeURIComponent(filePath);
+      let html = "";
+      if (["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"].includes(ext)) {
+        html = `<img src="${fileUrl}" alt="${filename}" style="max-width:100%; max-height:100%;">`;
+      } else if (["mp3", "wav", "ogg"].includes(ext)) {
+        html = `<audio controls style="width:100%;" src="${fileUrl}"></audio>`;
+      } else if (["mp4", "webm", "ogg"].includes(ext)) {
+        html = `<video controls style="width:100%;" src="${fileUrl}"></video>`;
+      } else if (["pdf"].includes(ext)) {
+        html = `<iframe src="${fileUrl}" style="width:100%; height:100%;" frameborder="0"></iframe>`;
+      } else {
+        return loadFileContent(filePath, filename);
+      }
+      document.getElementById("editor").innerHTML = html;
+      document.getElementById("file-name").textContent = filename;
+      document.getElementById("last-save").textContent = "";
+    }
+
+    /* ------------- Drag & Drop Handlers ------------- */
+    function dragStartHandler(e) {
+      draggedItem = e.currentTarget.getAttribute("data-path");
+      e.dataTransfer.setData("text/plain", draggedItem);
+      e.currentTarget.classList.add("dragging");
+    }
+    function dragOverHandler(e) {
+      e.preventDefault();
+    }
+    async function dropHandler(e) {
+      e.preventDefault();
+      // Jika file eksternal didrop, tampilkan modal upload dan proses file tersebut
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        document.getElementById("file-list-container").classList.remove("drag-over");
+        // Tampilkan modal upload terlebih dahulu
+        showModal("Uploading...", `<div id="upload-progress-container" style="display:block; margin-top:15px;">
+                                      <div id="upload-progress-bar" style="width:0%; height:20px; background-color:#0d6efd; border-radius:5px;"></div>
+                                      <div id="upload-progress-text" style="margin-top:5px; font-size:14px; text-align:center;">0%</div>
+                                    </div>`, "");
+        uploadFilesFromFiles(e.dataTransfer.files);
+        return;
+      }
+      const targetElement = e.currentTarget;
+      let destination = targetElement.getAttribute("data-path");
+      if (targetElement.getAttribute("data-isparent") === "true" && destination === "") {
+        destination = ".";
+      }
+      if (destination && draggedItem) {
+        try {
+          const res = await fetch("/move", {
+            method: "POST",
+            credentials: 'same-origin',
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source: draggedItem, destination: destination })
+          });
+          const result = await res.json();
+          if (result.success) {
+            loadFiles(destination);
+          } else {
+            console.error("Move failed: " + result.error);
+          }
+        } catch (error) {
+          console.error("Error during move: " + error.message);
+        }
+      }
+      targetElement.classList.remove("dragging");
+      draggedItem = null;
+    }
+    function dragEndHandler(e) {
+      e.currentTarget.classList.remove("dragging");
+    }
+    // Animasi drag-over pada container untuk file eksternal
+    const fileListContainer = document.getElementById("file-list-container");
+    fileListContainer.addEventListener("dragenter", function(e) {
+      e.preventDefault();
+      fileListContainer.classList.add("drag-over");
+    });
+    fileListContainer.addEventListener("dragleave", function(e) {
+      e.preventDefault();
+      fileListContainer.classList.remove("drag-over");
+    });
+    fileListContainer.addEventListener("dragover", function(e) {
+      e.preventDefault();
+    });
+    fileListContainer.addEventListener("drop", function(e) {
+      e.preventDefault();
+      fileListContainer.classList.remove("drag-over");
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        // Tampilkan modal upload untuk file eksternal
+        showModal("Uploading...", `<div id="upload-progress-container" style="display:block; margin-top:15px;">
+                                      <div id="upload-progress-bar" style="width:0%; height:20px; background-color:#0d6efd; border-radius:5px;"></div>
+                                      <div id="upload-progress-text" style="margin-top:5px; font-size:14px; text-align:center;">0%</div>
+                                    </div>`, "");
+        uploadFilesFromFiles(e.dataTransfer.files);
+      }
+    });
+
+    /* ------------- Context Menu Generation ------------- */
+    function generateContextMenu() {
+      let menuHTML = "<ul>";
+      menuHTML += `<li onclick="copyItem()">Copy</li>`;
+      if (copiedItem) { menuHTML += `<li onclick="pasteItem()">Paste</li>`; }
+      menuHTML += `<li onclick="showUploadModal(uploadFilesHandler)">Upload</li>
+                   <li onclick="showCurlModal(curlHandler)">Curl</li>`;
+      if (contextMenuTarget) {
+        menuHTML += `<li onclick="renameItem()">Rename</li>
+                     <li onclick="deleteItem()">Delete</li>`;
+        if (!contextMenuTargetIsDirectory &&
+           (contextMenuTargetName.toLowerCase().endsWith(".zip") ||
+            contextMenuTargetName.toLowerCase().endsWith(".rar"))) {
+          menuHTML += `<li onclick="extractItem()">Extract</li>`;
+        }
+      }
+      menuHTML += `<li onclick="newFolder()">New Folder</li>
+                   <li onclick="newFile()">New File</li>
+                   <li onclick="getLink()">Get Link</li>`;
+      menuHTML += "</ul>";
+      document.getElementById("context-menu").innerHTML = menuHTML;
+    }
+
+    /* ------------- Copy & Paste Functions ------------- */
+    function copyItem() {
+      if (!contextMenuTarget) return;
+      copiedItem = {
+        path: contextMenuTarget,
+        name: contextMenuTargetName,
+        isDirectory: contextMenuTargetIsDirectory
+      };
+    }
+    async function pasteItem() {
+      if (!copiedItem) return;
+      let destination = currentDir || ".";
+      if (contextMenuTarget && contextMenuTargetIsDirectory) {
+        destination = contextMenuTarget;
+      }
+      try {
+        const res = await fetch("/copy", {
+          method: "POST",
+          credentials: 'same-origin',
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source: copiedItem.path, destination: destination })
+        });
+        const result = await res.json();
+        if (result.success) {
+          loadFiles(currentDir);
+          copiedItem = null;
+        } else {
+          console.error("Copy failed: " + result.error);
+        }
+      } catch (error) {
+        console.error("Error during copy: " + error.message);
+      }
+    }
+
+    /* ------------- Extract Function ------------- */
+    async function extractItem() {
+      if (!contextMenuTarget) return;
+      try {
+        const res = await fetch("/extract", {
+          method: "POST",
+          credentials: 'same-origin',
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: contextMenuTarget })
+        });
+        const result = await res.json();
+        if (result.success) {
+          loadFiles(currentDir);
+        } else {
+          console.error("Extract failed: " + result.error);
+        }
+      } catch (error) {
+        console.error("Error during extract: " + error.message);
+      }
+    }
+
+    /* ------------- Upload Handler ------------- */
+    // Fungsi untuk mengupload file dari input file (modal) atau external drop
+    function uploadFilesFromFiles(files) {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+      }
+      let destination = currentDir || ".";
+      if (contextMenuTarget && contextMenuTargetIsDirectory) {
+        destination = contextMenuTarget;
+      }
+      formData.append("destination", destination);
+
+      // Tampilkan progress bar upload pada modal (jika belum muncul)
+      const progressHTML = `<div id="upload-progress-container" style="display:block; margin-top:15px;">
+                              <div id="upload-progress-bar" style="width:0%; height:20px; background-color:#0d6efd; border-radius:5px;"></div>
+                              <div id="upload-progress-text" style="margin-top:5px; font-size:14px; text-align:center;">0%</div>
+                            </div>`;
+      // Panggil showModal untuk memastikan modal muncul (judul "Uploading...")
+      showModal("Uploading...", progressHTML, "");
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/upload");
+      xhr.withCredentials = true;
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          document.getElementById("upload-progress-bar").style.width = percent + "%";
+          document.getElementById("upload-progress-text").innerText = percent + "%";
+        }
+      });
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          if (xhr.status === 200) {
+            // Jika progress belum mencapai 100%, animasikan sisa ke 100% selama 2 detik
+            let progressElem = document.getElementById("upload-progress-text");
+            let currentPercent = parseInt(progressElem.innerText);
+            if (currentPercent < 100) {
+              let interval = setInterval(() => {
+                currentPercent += 5;
+                if (currentPercent >= 100) {
+                  currentPercent = 100;
+                  clearInterval(interval);
+                  showUploadSuccessModal();
+                }
+                document.getElementById("upload-progress-bar").style.width = currentPercent + "%";
+                progressElem.innerText = currentPercent + "%";
+              }, 100);
+            } else {
+              showUploadSuccessModal();
+            }
+            loadFiles(currentDir);
+          } else {
+            console.error("Upload failed:", xhr.responseText);
+            hideModal();
+          }
+        }
+      };
+      xhr.send(formData);
+    }
+    // Handler yang dipanggil dari modal Upload (menggunakan input file)
+    function uploadFilesHandler() {
+      const uploadInput = document.getElementById("upload-input");
+      if (!uploadInput || uploadInput.files.length === 0) {
+        alert("No files selected.");
+        return;
+      }
+      uploadFilesFromFiles(uploadInput.files);
+    }
+
+    /* ------------- Curl Handler ------------- */
+    function curlHandler(url) {
+      if (!url) return;
+      let destination = currentDir || ".";
+      if (contextMenuTarget && contextMenuTargetIsDirectory) {
+        destination = contextMenuTarget;
+      }
+      fetch("/curl", {
+        method: "POST",
+        credentials: 'same-origin',
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url, destination: destination })
+      })
+      .then(res => res.json())
+      .then(result => {
+        if (result.success) { loadFiles(currentDir); }
+        else { console.error("Curl failed: " + result.error); }
+      })
+      .catch(error => { console.error("Error during curl: " + error.message); });
+    }
+
+    /* ------------- Fungsi untuk membuka file media ------------- */
+    // Jika file termasuk media, tampilkan menggunakan elemen HTML yang sesuai
+    function openMediaFile(filePath, filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      const fileUrl = window.location.origin + "/get-file?path=" + encodeURIComponent(filePath);
+      let html = "";
+      if (["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"].includes(ext)) {
+        html = `<img src="${fileUrl}" alt="${filename}" style="max-width:100%; max-height:100%;">`;
+      } else if (["mp3", "wav", "ogg"].includes(ext)) {
+        html = `<audio controls style="width:100%;" src="${fileUrl}"></audio>`;
+      } else if (["mp4", "webm", "ogg"].includes(ext)) {
+        html = `<video controls style="width:100%;" src="${fileUrl}"></video>`;
+      } else if (["pdf"].includes(ext)) {
+        html = `<iframe src="${fileUrl}" style="width:100%; height:100%;" frameborder="0"></iframe>`;
+      } else {
+        return loadFileContent(filePath, filename);
+      }
+      document.getElementById("editor").innerHTML = html;
+      document.getElementById("file-name").textContent = filename;
+      document.getElementById("last-save").textContent = "";
+    }
+
+    /* ------------- Editor & File Operations ------------- */
+    function countWords(text) {
+      return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+    }
+    function showSavingStatus() {
+      document.getElementById("save-status").innerHTML = '<div class="spinner"></div>';
+    }
+    function showSavedStatus() {
+      document.getElementById("save-status").innerHTML = '<span style="color:green;">&#10003;</span>';
+      document.getElementById("last-save").textContent = "Last save: " + new Date().toLocaleTimeString();
+      setTimeout(() => { document.getElementById("save-status").innerHTML = ''; }, 2000);
+    }
+    function hideSavingStatus() {
+      document.getElementById("save-status").innerHTML = '';
+    }
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs' }});
+    require(['vs/editor/editor.main'], function() {
+      editor = monaco.editor.create(document.getElementById('editor'), {
+        value: '',
+        language: 'plaintext',
+        theme: "vs-dark"
+      });
+      editor.onDidChangeModelContent(() => {
+        if (!currentFilePath) return;
+        const content = editor.getValue();
+        const currentWordCount = countWords(content);
+        if (Math.abs(currentWordCount - lastSavedWordCount) >= 10) {
+          console.log("Auto-save: perubahan ≥ 10 kata terdeteksi.");
+          saveFile();
+        }
+      });
+    });
+    window.addEventListener("keydown", function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.keyCode === 83) {
+        e.preventDefault();
+        saveFile();
+      }
+    });
+    async function saveFile() {
+      if (!currentFilePath) return;
+      const content = editor.getValue();
+      showSavingStatus();
+      try {
+        const res = await fetch("/save-file", {
+          method: "POST",
+          credentials: 'same-origin',
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: currentFilePath, content: content })
+        });
+        const result = await res.json();
+        if (result.success) {
+          lastSavedWordCount = countWords(content);
+          showSavedStatus();
+        } else {
+          console.error("Gagal menyimpan file: " + result.error);
+          hideSavingStatus();
+        }
+      } catch (error) {
+        console.error("Error saat menyimpan file: " + error.message);
+        hideSavingStatus();
+      }
+    }
+    function getLanguage(filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      switch(ext) {
+        case 'js': return 'javascript';
+        case 'html': return 'html';
+        case 'css': return 'css';
+        case 'json': return 'json';
+        case 'py': return 'python';
+        case 'java': return 'java';
+        case 'c': return 'c';
+        case 'cpp': return 'cpp';
+        case 'md': return 'markdown';
+        default: return 'plaintext';
+      }
+    }
+    async function loadFiles(dir = "") {
+      try {
+        currentDir = dir;
+        const response = await fetch("/list?dir=" + encodeURIComponent(dir), { credentials: 'same-origin' });
+        if (!response.ok) throw new Error("Unauthorized");
+        const files = await response.json();
+        if (!Array.isArray(files)) throw new Error("Response bukan array");
+        fetchedFiles = files;
+        renderFileList();
+      } catch (error) {
+        console.error("Terjadi kesalahan saat memuat file/folder:", error);
+        if (error.message === "Unauthorized") {
+          showLoginModal();
+        }
+      }
+    }
+    function renderFileList() {
+      const fileListElem = document.getElementById("file-list");
+      fileListElem.innerHTML = "";
+      // Tampilkan "Kembali" jika tidak berada di direktori dasar
+      if (currentDir !== "") {
+        const parts = currentDir.split("/");
+        parts.pop();
+        const parentDir = parts.join("/");
+        const li = document.createElement("li");
+        li.setAttribute("data-isparent", "true");
+        li.setAttribute("data-path", parentDir);
+        li.setAttribute("data-isdirectory", "true");
+        li.innerHTML = `<a onclick="loadFiles('${parentDir}')">
+          <img src="https://cdn-icons-png.flaticon.com/512/18380/18380367.png" class="icon" alt="Kembali">
+          Kembali
+        </a>`;
+        li.draggable = true;
+        li.addEventListener("dragstart", dragStartHandler);
+        li.addEventListener("dragover", dragOverHandler);
+        li.addEventListener("drop", dropHandler);
+        li.addEventListener("dragend", dragEndHandler);
+        fileListElem.appendChild(li);
+      }
+      const searchQuery = document.getElementById("file-search").value.toLowerCase();
+      fetchedFiles.forEach(file => {
+        if (file.name.toLowerCase().indexOf(searchQuery) === -1) return;
+        const li = document.createElement("li");
+        li.setAttribute("data-path", file.path);
+        li.setAttribute("data-name", file.name);
+        li.setAttribute("data-isdirectory", file.isDirectory);
+        li.draggable = true;
+        li.addEventListener("dragstart", dragStartHandler);
+        li.addEventListener("dragover", dragOverHandler);
+        li.addEventListener("drop", dropHandler);
+        li.addEventListener("dragend", dragEndHandler);
+        if (file.isDirectory) {
+          li.innerHTML = `<a onclick="loadFiles('${file.path}')">
+            <img src="https://cdn-icons-png.flaticon.com/512/10833/10833561.png" class="icon" alt="Folder">
+            ${file.name}
+          </a>`;
+        } else {
+          li.innerHTML = `<a onclick="loadFileContent('${encodeURIComponent(file.path)}', '${file.name}')">
+            <img src="https://cdn-icons-png.flaticon.com/512/10833/10833505.png" class="icon" alt="File">
+            ${file.name}
+          </a>`;
+          if (file.path === currentFilePath) {
+            li.classList.add("active");
+          }
+        }
+        fileListElem.appendChild(li);
+      });
+    }
+    document.getElementById("file-search").addEventListener("input", function() {
+      renderFileList();
+    });
+    async function loadFileContent(encodedPath, filename) {
+      const filePath = decodeURIComponent(encodedPath);
+      const ext = filename.split('.').pop().toLowerCase();
+      // Jika file merupakan media, gunakan openMediaFile
+      if (["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "mp3", "wav", "ogg", "mp4", "webm", "pdf"].includes(ext)) {
+        openMediaFile(filePath, filename);
+        return;
+      }
+      // Reset tampilan editor
+      document.getElementById("editor").innerHTML = "";
+      try {
+        const response = await fetch("/get-file?path=" + encodeURIComponent(filePath), { credentials: 'same-origin' });
+        if (!response.ok) throw new Error("Gagal memuat file.");
+        const content = await response.text();
+        if (editor) {
+          const language = getLanguage(filename);
+          const oldModel = editor.getModel();
+          const newModel = monaco.editor.createModel(content, language);
+          editor.setModel(newModel);
+          if (oldModel) oldModel.dispose();
+          currentFilePath = filePath;
+          lastSavedWordCount = countWords(content);
+          document.getElementById("file-name").textContent = filename;
+          document.getElementById("last-save").textContent = "Last save: -";
+          renderFileList();
+        }
+      } catch (error) {
+        console.error("Error saat memuat file:", error);
+      }
+    }
+    // Event listener untuk context menu
+    document.getElementById("file-list-container").addEventListener("contextmenu", function(e) {
+      e.preventDefault();
+      let li = e.target.closest("li");
+      if (li) {
+        contextMenuTarget = li.getAttribute("data-path");
+        contextMenuTargetName = li.getAttribute("data-name");
+        contextMenuTargetIsDirectory = li.getAttribute("data-isdirectory") === "true";
+      } else {
+        contextMenuTarget = null;
+        contextMenuTargetName = "";
+        contextMenuTargetIsDirectory = false;
+      }
+      generateContextMenu();
+      const contextMenu = document.getElementById("context-menu");
+      contextMenu.style.top = e.pageY + "px";
+      contextMenu.style.left = e.pageX + "px";
+      contextMenu.style.display = "block";
+    });
+    document.addEventListener("click", function(e) {
+      const contextMenu = document.getElementById("context-menu");
+      if (contextMenu.style.display === "block") {
+        contextMenu.style.display = "none";
+      }
+    });
+    async function renameItem() {
+      if (!contextMenuTarget) return;
+      showRenameModal(contextMenuTargetName, async function(newName) {
+        if (newName && newName !== contextMenuTargetName) {
+          try {
+            const res = await fetch("/rename", {
+              method: "POST",
+              credentials: 'same-origin',
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ oldPath: contextMenuTarget, newName: newName })
+            });
+            const result = await res.json();
+            if (result.success) {
+              console.log("Rename berhasil!");
+              loadFiles(currentDir);
+            } else {
+              console.error("Rename gagal: " + result.error);
+            }
+          } catch (error) {
+            console.error("Error: " + error.message);
+          }
+        }
+      });
+    }
+    async function deleteItem() {
+      if (!contextMenuTarget) return;
+      showDeleteModal(contextMenuTargetName, async function() {
+        try {
+          const res = await fetch("/delete", {
+            method: "POST",
+            credentials: 'same-origin',
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: contextMenuTarget })
+          });
+          const result = await res.json();
+          if (result.success) {
+            loadFiles(currentDir);
+          } else {
+            console.error("Delete gagal: " + result.error);
+          }
+        } catch (error) {
+          console.error("Error: " + error.message);
+        }
+      });
+    }
+    async function newFolder() {
+      showNewFolderModal(async function(folderName) {
+        if (folderName) {
+          try {
+            const targetDir = (contextMenuTarget && contextMenuTargetIsDirectory) ? contextMenuTarget : currentDir;
+            const res = await fetch("/new-folder", {
+              method: "POST",
+              credentials: 'same-origin',
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ directory: targetDir, folderName: folderName })
+            });
+            const result = await res.json();
+            if (result.success) {
+              loadFiles(currentDir);
+            } else {
+              console.error("Gagal membuat folder: " + result.error);
+            }
+          } catch (error) {
+            console.error("Error: " + error.message);
+          }
+        }
+      });
+    }
+    async function newFile() {
+      showNewFileModal(async function(fileName) {
+        if (fileName) {
+          try {
+            const targetDir = (contextMenuTarget && contextMenuTargetIsDirectory) ? contextMenuTarget : currentDir;
+            const res = await fetch("/new-file", {
+              method: "POST",
+              credentials: 'same-origin',
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ directory: targetDir, fileName: fileName })
+            });
+            const result = await res.json();
+            if (result.success) {
+              loadFiles(currentDir);
+            } else {
+              console.error("Gagal membuat file: " + result.error);
+            }
+          } catch (error) {
+            console.error("Error: " + error.message);
+          }
+        }
+      });
+    }
+    function getLink() {
+      if (!contextMenuTarget) return;
+      const link = window.location.origin + "/get-file?path=" + encodeURIComponent(contextMenuTarget);
+      showGetLinkModal(link);
+    }
+    // Cek status login saat halaman dimuat
+    fetch('/check-login', { credentials: 'same-origin' })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.authenticated) {
+          showLoginModal();
+        } else {
+          loadFiles();
+        }
+      })
+      .catch(err => {
+        console.error("Error checking login:", err);
+        showLoginModal();
+      });
+    function showLoginModal() {
+      modalConfirmCallback = function(password) {
+        fetch('/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: password })
+        })
+        .then(res => {
+          if (res.ok) {
+            console.log("Login berhasil!");
+            loadFiles();
+          } else {
+            alert("Invalid password. Please try again.");
+            showLoginModal();
+          }
+        })
+        .catch(err => {
+          console.error("Login error:", err);
+          showLoginModal();
+        });
+      };
+      const contentHTML = `<input type="password" id="modal-input" placeholder="Enter password" style="width:100%;padding:5px;font-size:14px;border-radius:5px;border:1px solid #444;">`;
+      const buttonsHTML = `<button class="modal-confirm" onclick="modalConfirm()">Login</button>`;
+      showModal("Login", contentHTML, buttonsHTML);
+    }
+    window.setInterval(() => { loadFiles(currentDir); }, 10000);
+  </script>
+</body>
+</html>
