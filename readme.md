@@ -2,6 +2,8 @@
 
 Cloud File Manager is a cutting-edge, cloud-based file management and editing solution built with Node.js, Express, and the Monaco Editor. It provides a robust set of tools to efficiently manage, edit, and organize your files and directories—all through a modern web interface.
 
+![Preview](preview/video.gif)
+
 ## Overview
 
 Cloud File Manager combines powerful back-end functionality with an intuitive, responsive front-end. Whether you're managing code files or organizing media, this solution streamlines your workflow by integrating secure authentication, comprehensive file operations, and an advanced code editor.
@@ -51,8 +53,8 @@ Cloud File Manager combines powerful back-end functionality with an intuitive, r
 ### Steps
 
 ```sh
-git clone https://github.com/yourusername/cloud-file-manager.git
-cd cloud-file-manager
+git clone https://github.com/rubahilang/Cloud-File-Manager
+cd Cloud-File-Manager
 npm install
 ```
 
@@ -61,7 +63,9 @@ npm install
 Start the server with the following command:
 
 ```sh
-node server.js
+node app.js
+
+# 'admin' is default password for login to file manager
 ```
 
 Then, open your web browser and navigate to [http://localhost:3999](http://localhost:3999) to access the application.
